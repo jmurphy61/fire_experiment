@@ -20,9 +20,9 @@ plot.hist(CHANGES, bins=20)
 # https://stackoverflow.com/questions/56656777/userwarning-matplotlib-is-currently-using-agg-which-is-a-non-gui-backend-so
 plot.show()
 
-def optimize(balance=None,
-        monthly_growth_rate_mean=None,
-        monthly_growth_rate_standard_deviation=None,
-        years=None,
-        minimum_discretionary_spending=None,
-        maximum_discretionary_spending=None):
+# def optimize(balance=None,
+#         monthly_growth_rate_mean=None,
+#         monthly_growth_rate_standard_deviation=None,
+#         years=None,
+#         minimum_discretionary_spending=None,
+#         maximum_discretionary_spending=None):
