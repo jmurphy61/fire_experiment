@@ -4,11 +4,15 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+ipykernel = "*"
 pylint = "*"
+rope = "*"
 
 [packages]
 matplotlib = "*"
 numpy = "*"
+pandas = "*"
+openpyxl = "*"
 
 [requires]
 python_version = "3.8"
