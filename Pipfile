@@ -9,10 +9,7 @@ pylint = "*"
 rope = "*"
 
 [packages]
-matplotlib = "*"
-numpy = "*"
-pandas = "*"
-openpyxl = "*"
+fire-experiment = {editable = true, path = "."}
 
 [requires]
 python_version = "3.8"

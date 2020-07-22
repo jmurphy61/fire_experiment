@@ -1,16 +1,14 @@
-"""FIRE simulation"""
-import argparse
-import math
+"""Conceptual models related to FIRE"""
+import os
 import random
 from datetime import datetime
 from multiprocessing.pool import ThreadPool
 import pandas
-
-def sigmoid(logistic_max, logistic_growth_rate, logistic_midpoint, input_value):
-    """https://en.wikipedia.org/wiki/Logistic_function"""
-    return logistic_max / (1 + math.exp(-logistic_growth_rate * (input_value - logistic_midpoint)))
+from .utilities import sigmoid
+from . import data
 
 class Scenario:
+    """Constraints for a potential FIRE lifestyle, and simulation functionality."""
     def __init__(self, **kwargs):
         self.simulations = int(kwargs.get('simulations', 1000))
         self.months = int(kwargs.get('months', 360))
@@ -22,40 +20,36 @@ class Scenario:
             kwargs.get('minimum_discretionary_spending', 2000))
         self.maximum_discretionary_spending = float(
             kwargs.get('maximum_discretionary_spending', 4000))
-        self.output_histories = str(kwargs.get('output_histories', False))
+        self.output_histories = bool(kwargs.get('output_histories', False))
 
-    def simulate_once(self, simulation_number) -> dict:
+    def simulate(self, _) -> dict:
         """Run one simulation"""
         rows_list = list()
 
-        first_row = dict()
-        first_row['Starting Balance'] = self.starting_balance
-        first_row['Cumulative Inflation Multiplier'] = 1
-        first_row['Discretionary Spending'] = (
-            self.minimum_discretionary_spending + self.maximum_discretionary_spending
-            ) / 2
+        first_row = {
+            'Starting Balance': self.starting_balance,
+            'Cumulative Inflation Multiplier': 1,
+            'Discretionary Spending': (
+                self.minimum_discretionary_spending + self.maximum_discretionary_spending) / 2,
+            'Growth Rate': random.gauss(
+                self.monthly_growth_rate_mean,
+                self.monthly_growth_rate_std_dev)
+        }
         first_row['Gross Withdrawal'] = first_row['Discretionary Spending'] / 0.7
-        first_row['Growth Rate'] = random.gauss(
-            self.monthly_growth_rate_mean,
-            self.monthly_growth_rate_std_dev)
         first_row['Growth'] = first_row['Starting Balance'] * first_row['Growth Rate']
         first_row['Net Growth/Loss'] = first_row['Growth'] - first_row['Gross Withdrawal']
         first_row['Ending Balance'] = first_row['Starting Balance'] + first_row['Net Growth/Loss']
         rows_list.append(first_row)
 
         for month in range(1, self.months):
-            row = dict()
-            try:
-                row['Starting Balance'] = rows_list[month - 1]['Ending Balance']
-            except IndexError:
-                print('IndexError')
-                print('simulation_number', simulation_number)
-                print('month', month)
-                print('rows_lost', rows_list)
-                print('row', row)
-                raise IndexError
-            row['Cumulative Inflation Multiplier'] = (
-                1 + (self.annual_inflation_rate / 12)) ** month
+            row = {
+                'Starting Balance': rows_list[month - 1]['Ending Balance'],
+                'Cumulative Inflation Multiplier': (
+                    1 + (self.annual_inflation_rate / 12)) ** month,
+                'Growth Rate': random.gauss(
+                    self.monthly_growth_rate_mean,
+                    self.monthly_growth_rate_std_dev)
+            }
             try:
                 row['Discretionary Spending'] = (
                     sigmoid(
@@ -72,9 +66,6 @@ class Scenario:
             except OverflowError:
                 row['Discretionary Spending'] = self.maximum_discretionary_spending
             row['Gross Withdrawal'] = row['Discretionary Spending'] / 0.7
-            row['Growth Rate'] = random.gauss(
-                self.monthly_growth_rate_mean,
-                self.monthly_growth_rate_std_dev)
             row['Growth'] = row['Starting Balance'] * row['Growth Rate']
             row['Net Growth/Loss'] = row['Growth'] - row['Gross Withdrawal']
             row['Ending Balance'] = row['Starting Balance'] + row['Net Growth/Loss']
@@ -83,27 +74,33 @@ class Scenario:
                 return rows_list
         return rows_list
 
-    def simulate(self) -> dict:
+    def simulate_many(self) -> dict:
         """Generate the specified number of years in a simulation of a FIRE situation
         based on the provided parameters"""
 
         failures = 0
-        history_writer = pandas.ExcelWriter(f'histories_{datetime.now().isoformat()}.xlsx') # pylint: disable=abstract-class-instantiated
+        # https://stackoverflow.com/questions/59983765/pandas-abstract-class-excelwriter-with-abstract-methods-instantiatedpylint-p
+        if self.output_histories:
+            history_writer = pandas.ExcelWriter( # pylint: disable=abstract-class-instantiated
+                os.path.join(
+                    os.path.dirname(data.__file__),
+                    f'histories_{datetime.now().isoformat()}.xlsx'
+                ))
 
         with ThreadPool(4) as pool:
             for simulation_number, history in enumerate(
-                    pool.map(self.simulate_once, range(self.simulations))):
+                    pool.map(self.simulate, range(self.simulations))):
                 if len(history) < self.months:
                     failures += 1
                     evaluation = 'Failure'
                 else:
                     evaluation = 'Success'
-                if self.output_histories == 'True':
+                if self.output_histories:
                     pandas.DataFrame(history).to_excel(
                         history_writer,
                         f'{simulation_number + 1} {evaluation}')
 
-        if scenario.output_histories == 'True':
+        if self.output_histories:
             history_writer.save()
         return {
             "Simulations": self.simulations,
@@ -112,47 +109,3 @@ class Scenario:
             "Success Rate": (self.simulations - failures) / self.simulations,
             "Failures Rate": failures / self.simulations
         }
-
-ARG_PARSER = argparse.ArgumentParser()
-ARG_PARSER.add_argument(
-    '--simulations',
-    dest='simulations',
-    default=1000)
-ARG_PARSER.add_argument(
-    '--months',
-    dest='months',
-    default=360)
-ARG_PARSER.add_argument(
-    '--starting-balance',
-    dest='starting_balance',
-    default=1e6)
-ARG_PARSER.add_argument(
-    '--monthly-growth-rate-mean',
-    dest='monthly_growth_rate_mean',
-    default=0.0061)
-ARG_PARSER.add_argument(
-    '--monthly-growth-rate-std-dev',
-    dest='monthly_growth_rate_std_dev',
-    default=0.0537)
-ARG_PARSER.add_argument(
-    '--annual-inflation-rate',
-    dest='annual_inflation_rate',
-    default=0.02)
-ARG_PARSER.add_argument(
-    '--minimum-discretionary-spending',
-    dest='minimum_discretionary_spending',
-    default=2000)
-ARG_PARSER.add_argument(
-    '--maximum-discretionary-spending',
-    dest='maximum_discretionary_spending',
-    default=4000)
-ARG_PARSER.add_argument(
-    '--output-histories',
-    dest='output_histories',
-    action='store_true',
-    default=False)
-
-if __name__ == '__main__':
-    args = ARG_PARSER.parse_args()
-    scenario = Scenario(**vars(args))
-    print(scenario.simulate())
