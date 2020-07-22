@@ -80,14 +80,8 @@ class Scenario:
             row['Ending Balance'] = row['Starting Balance'] + row['Net Growth/Loss']
             rows_list.append(row)
             if (row['Ending Balance'] <= 0) and (month < self.months - 1):
-                return {
-                    'history': rows_list,
-                    'success': False
-                }
-        return {
-            'history': rows_list,
-            'success': True
-        }
+                return rows_list
+        return rows_list
 
     def simulate(self) -> dict:
         """Generate the specified number of years in a simulation of a FIRE situation
@@ -96,15 +90,18 @@ class Scenario:
         failures = 0
         history_writer = pandas.ExcelWriter(f'histories_{datetime.now().isoformat()}.xlsx') # pylint: disable=abstract-class-instantiated
 
-        # for simulation in range(simulations):
-        #     result = simulate_once(simulation)
         with ThreadPool(4) as pool:
-            for simulation_number, result in enumerate(
+            for simulation_number, history in enumerate(
                     pool.map(self.simulate_once, range(self.simulations))):
-                if result['success'] is False:
-                    failures +=1
+                if len(history) < self.months:
+                    failures += 1
+                    evaluation = 'Failure'
+                else:
+                    evaluation = 'Success'
                 if self.output_histories == 'True':
-                    pandas.DataFrame(result['history']).to_excel(history_writer, str(simulation_number))
+                    pandas.DataFrame(history).to_excel(
+                        history_writer,
+                        f'{simulation_number + 1} {evaluation}')
 
         if scenario.output_histories == 'True':
             history_writer.save()
@@ -152,6 +149,7 @@ ARG_PARSER.add_argument(
 ARG_PARSER.add_argument(
     '--output-histories',
     dest='output_histories',
+    action='store_true',
     default=False)
 
 if __name__ == '__main__':
